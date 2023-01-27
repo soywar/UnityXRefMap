@@ -11,15 +11,15 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
-    - name: Setup .NET Core
-      uses: actions/setup-dotnet@v1
+    - name: Setup dotnet
+      uses: actions/setup-dotnet@v3
       with:
-        dotnet-version: 3.1.x
+        dotnet-version: 6.0.x
 
     - name: Install DocFX
-      run: choco install docfx -y
+      run: dotnet tool install -g docfx
 
     - name: Restore Packages
       run: dotnet restore
@@ -28,7 +28,7 @@ jobs:
       run: dotnet build --configuration Release --no-restore
 
     - name: Checkout GitHub Pages branch
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         ref: gh-pages
         path: UnityXRefMap/out
@@ -44,7 +44,7 @@ jobs:
         dotnet run --configuration Release --no-build
 
     - name: Upload XRef Maps
-      uses: actions/upload-artifact@v2.1.4
+      uses: actions/upload-artifact@v3
       with:
         name: xrefmaps
         path: UnityXRefMap/out
