@@ -134,51 +134,26 @@ namespace UnityXRefMap
 
                     foreach (YamlMappingNode item in (YamlSequenceNode)reference.Children["items"])
                     {
-                        string fullName = Normalize(item.GetScalarValue("fullName"));
-                        string name     = Normalize(item.GetScalarValue("name"));
-                        string type     = item.GetScalarValue("type");
-                        string parent   = item.GetScalarValue("parent");
+                        string apiUrl = $"https://docs.unity3d.com/{version}/Documentation/ScriptReference/";
+                        string commentId = item.GetScalarValue("commentId");
 
-                        string documentationFileName;
+                        if (commentId.Contains("Overload:")) continue;
 
-                        switch (type)
-                        {
-                            case "Property":
-                            case "Field":
-                                if (char.IsLower(name[0]))
-                                {
-                                    documentationFileName = parent + "-" + name;
-                                }
-                                else
-                                {
-                                    documentationFileName = parent + "." + name;
-                                }
-
-                                break;
-
-                            default:
-                                documentationFileName = fullName;
-                                break;
-                        }
-
-                        if (documentationFileName.StartsWith("UnityEngine.") || documentationFileName.StartsWith("UnityEditor."))
-                        {
-                            documentationFileName = documentationFileName.Substring(12);
-                        }
-
-                        string url = $"https://docs.unity3d.com/Documentation/ScriptReference/{documentationFileName}.html";
-
-                        Logger.Trace($"Adding reference to '{fullName}'", 2);
-
-                        references.Add(new XRefMapReference
+                        XRefMapReference xRefMapReference = new XRefMapReference()
                         {
                             Uid = item.GetScalarValue("uid"),
-                            Name = name,
-                            Href = url,
-                            CommentId = item.GetScalarValue("commentId"),
-                            FullName = fullName,
-                            NameWithType = item.GetScalarValue("nameWithType")
-                        });
+                            Name = item.GetScalarValue("name"),
+                            CommentId = commentId,
+                            FullName = item.GetScalarValue("fullName"),
+                            NameWithType = item.GetScalarValue("nameWithType"),
+                            Type = item.GetScalarValue("type")
+                        };
+                        
+                        xRefMapReference.FixHref(apiUrl);
+                        
+                        Logger.Trace($"Adding reference to '{xRefMapReference.FullName}'", 2);
+                        
+                        references.Add(xRefMapReference);
                     }
                 }
             }
@@ -199,17 +174,6 @@ namespace UnityXRefMap
             File.WriteAllText(outputFilePath, "### YamlMime:XRefMap\n" + serializedMap);
 
             return relativeOutputFilePath;
-        }
-
-        private static string Normalize(string text)
-        {
-            if (text.Contains('(')) text = text.Remove(text.IndexOf('('));
-            if (text.Contains('<')) text = text.Remove(text.IndexOf('<'));
-
-            text = text.Replace('`', '_');
-            text = text.Replace("#ctor", "ctor");
-
-            return text;
         }
     }
 }

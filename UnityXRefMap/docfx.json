@@ -7,9 +7,6 @@
         }
       ],
       "filter": "filterConfig.yml",
-      "properties": {
-        "TargetFramework": "net35"
-      },
       "dest": "ScriptReference"
     }
   ],
