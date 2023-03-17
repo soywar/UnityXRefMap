@@ -13,27 +13,63 @@ namespace UnityXRefMap
 {
     internal class Program
     {
-        private static readonly string UnityCsReferenceRepositoryUrl = "https://github.com/Unity-Technologies/UnityCsReference";
-        private static readonly string UnityCsReferenceLocalPath = Path.Join(Environment.CurrentDirectory, "UnityCsReference");
-        private static readonly string GeneratedMetadataPath = Path.Join(Environment.CurrentDirectory, "ScriptReference");
-        private static readonly string OutputFolder = Path.Join(Environment.CurrentDirectory, "out");
+        private static readonly string UnityCsReferenceRepositoryUrl;
+        private static readonly string UnityCsReferenceLocalPath;
+        private static readonly string GeneratedMetadataPath;
+        private static readonly string OutputFolder;
+        private static readonly Serializer Serializer;
+        private static readonly Deserializer Deserializer;
+        private static readonly List<XRefMapReference> References;
+        private static readonly Process Process;
+        private static readonly Regex BranchRegex;
 
+        static Program()
+        {
+            UnityCsReferenceRepositoryUrl = "https://github.com/Unity-Technologies/UnityCsReference";
+            UnityCsReferenceLocalPath = Path.Join(Environment.CurrentDirectory, "UnityCsReference");
+            GeneratedMetadataPath = Path.Join(Environment.CurrentDirectory, "ScriptReference");
+            OutputFolder = Path.Join(Environment.CurrentDirectory, "out");
+            Serializer = new();
+            Deserializer = new();
+            References = new();
+            BranchRegex = new(@"^origin/(\d{4}\.\d+)$");
+            Process = new()
+            {
+                StartInfo = new()
+                {
+                    CreateNoWindow = true,
+                    FileName = "docfx",
+                    Arguments = "metadata",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false
+                }
+            };
+
+            Process.OutputDataReceived += (_, args) => Logger.Trace("[DocFX]" + args.Data, 1);
+            Process.ErrorDataReceived += (_, args) =>
+            {
+                if (string.IsNullOrEmpty(args.Data)) return;
+
+                Logger.Error($"[DocFX] {args.Data}");
+            };
+        }
+        
         private static void Main(string[] args)
         {
+            Match match;
+            List<string> files = new();
+            
             if (!Directory.Exists(UnityCsReferenceLocalPath))
             {
                 Repository.Clone(UnityCsReferenceRepositoryUrl, UnityCsReferenceLocalPath);
             }
 
-            var files = new List<string>();
-
-            using (var repo = new Repository(UnityCsReferenceLocalPath))
+            using (Repository repo = new(UnityCsReferenceLocalPath))
             {
-                Regex branchRegex = new Regex(@"^origin/(\d{4}\.\d+)$");
-
                 foreach (Branch branch in repo.Branches.OrderByDescending(b => b.FriendlyName))
                 {
-                    Match match = branchRegex.Match(branch.FriendlyName);
+                    match = BranchRegex.Match(branch.FriendlyName);
 
                     if (!match.Success) continue;
 
@@ -63,7 +99,7 @@ namespace UnityXRefMap
                 }
             }
 
-            using (var writer = new StreamWriter(Path.Join(OutputFolder, "index.html")))
+            using (StreamWriter writer = new(Path.Join(OutputFolder, "index.html")))
             {
                 Logger.Info("Writing index.html");
 
@@ -82,47 +118,27 @@ namespace UnityXRefMap
         {
             Logger.Info("Running DocFX");
 
-            var process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    CreateNoWindow = true,
-                    FileName = "docfx",
-                    Arguments = "metadata",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false
-                }
-            };
+            Process.Start();
 
-            process.OutputDataReceived += (sender, args) => Logger.Trace("[DocFX]" + args.Data, 1);
-            process.ErrorDataReceived += (sender, args) =>
-            {
-                if (string.IsNullOrEmpty(args.Data)) return;
+            Process.BeginOutputReadLine();
+            Process.BeginErrorReadLine();
 
-                Logger.Error("[DocFX]" + args.Data);
-            };
+            Process.WaitForExit();
 
-            process.Start();
+            Process.CancelOutputRead();
+            Process.CancelErrorRead();
 
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-
-            process.WaitForExit();
-
-            return process.ExitCode;
+            return Process.ExitCode;
         }
 
         private static string GenerateMap(string version)
         {
+            YamlMappingNode reference;
             Logger.Info($"Generating XRef map for Unity {version}");
 
-            var serializer = new Serializer();
-            var deserializer = new Deserializer();
+            References.Clear();
 
-            var references = new List<XRefMapReference>();
-
-            foreach (var file in Directory.GetFiles(GeneratedMetadataPath, "*.yml"))
+            foreach (string file in Directory.GetFiles(GeneratedMetadataPath, "*.yml"))
             {
                 Logger.Trace($"Reading '{file}'", 1);
 
@@ -130,7 +146,7 @@ namespace UnityXRefMap
                 {
                     if (reader.ReadLine() != "### YamlMime:ManagedReference") continue;
 
-                    YamlMappingNode reference = deserializer.Deserialize<YamlMappingNode>(reader);
+                    reference = Deserializer.Deserialize<YamlMappingNode>(reader);
 
                     foreach (YamlMappingNode item in (YamlSequenceNode)reference.Children["items"])
                     {
@@ -139,7 +155,7 @@ namespace UnityXRefMap
 
                         if (commentId.Contains("Overload:")) continue;
 
-                        XRefMapReference xRefMapReference = new XRefMapReference()
+                        XRefMapReference xRefMapReference = new()
                         {
                             Uid = item.GetScalarValue("uid"),
                             Name = item.GetScalarValue("name"),
@@ -153,15 +169,15 @@ namespace UnityXRefMap
                         
                         Logger.Trace($"Adding reference to '{xRefMapReference.FullName}'", 2);
                         
-                        references.Add(xRefMapReference);
+                        References.Add(xRefMapReference);
                     }
                 }
             }
 
-            var serializedMap = serializer.Serialize(new XRefMap
+            string serializedMap = Serializer.Serialize(new XRefMap
             {
                 Sorted = true,
-                References = references.OrderBy(r => r.Uid).ToArray()
+                References = References.OrderBy(r => r.Uid).ToArray()
             });
 
             string relativeOutputFilePath = Path.Join(version, "xrefmap.yml");
@@ -171,7 +187,7 @@ namespace UnityXRefMap
 
             Directory.CreateDirectory(Path.GetDirectoryName(outputFilePath));
 
-            File.WriteAllText(outputFilePath, "### YamlMime:XRefMap\n" + serializedMap);
+            File.WriteAllText(outputFilePath, $"### YamlMime:XRefMap\n{serializedMap}");
 
             return relativeOutputFilePath;
         }

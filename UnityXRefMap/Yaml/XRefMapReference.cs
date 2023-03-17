@@ -5,7 +5,7 @@ namespace UnityXRefMap.Yaml
 {
     internal class XRefMapReference
     {
-        private static readonly string[] HrefNamespacesToTrim = new string[] { "UnityEditor", "UnityEngine" };
+        private static readonly string[] HrefNamespacesToTrim = { "UnityEditor", "UnityEngine" };
         
         [YamlMember(Alias = "uid")] public string Uid;
         [YamlMember(Alias = "name")] public string Name;
@@ -29,7 +29,7 @@ namespace UnityXRefMap.Yaml
                 href = Uid;
 
                 // Trim UnityEngine and UnityEditor namespaces from href
-                foreach (var hrefNamespaceToTrim in HrefNamespacesToTrim)
+                foreach (string hrefNamespaceToTrim in HrefNamespacesToTrim)
                 {
                     href = href.Replace($"{hrefNamespaceToTrim}.", "");
                 }
