@@ -20,7 +20,9 @@ namespace UnityXRefMap
         private static readonly Serializer Serializer;
         private static readonly Deserializer Deserializer;
         private static readonly List<XRefMapReference> References;
-        private static readonly Process Process;
+        private static readonly Process ProcessExecuteDocFX;
+        private static readonly Process ProcessInstallDocFX;
+        private static readonly Process ProcessUpgradeDocFX;
         private static readonly Regex BranchRegex;
 
         static Program()
@@ -32,8 +34,8 @@ namespace UnityXRefMap
             Serializer = new();
             Deserializer = new();
             References = new();
-            BranchRegex = new(@"^origin/(\d{4}\.\d+)$");
-            Process = new()
+            BranchRegex = new(@"^origin/(\d{4})\.(\d+)$");
+            ProcessExecuteDocFX = new()
             {
                 StartInfo = new()
                 {
@@ -46,11 +48,62 @@ namespace UnityXRefMap
                 }
             };
 
-            Process.OutputDataReceived += (_, args) => Logger.Trace("[DocFX]" + args.Data, 1);
-            Process.ErrorDataReceived += (_, args) =>
+            ProcessExecuteDocFX.OutputDataReceived += (_, args) =>
             {
-                if (string.IsNullOrEmpty(args.Data)) return;
+                if (string.IsNullOrWhiteSpace(args.Data)) return;
+                Logger.Trace($"[DocFX] {args.Data}", 1);
+            };
+            ProcessExecuteDocFX.ErrorDataReceived += (_, args) =>
+            {
+                if (string.IsNullOrWhiteSpace(args.Data)) return;
+                Logger.Error($"[DocFX] {args.Data}");
+            };
+            
+            ProcessInstallDocFX = new()
+            {
+                StartInfo = new()
+                {
+                    CreateNoWindow = true,
+                    FileName = "dotnet",
+                    Arguments = "tool install -g docfx --version 2.61.0",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false
+                }
+            };
 
+            ProcessInstallDocFX.OutputDataReceived += (_, args) =>
+            {
+                if (string.IsNullOrWhiteSpace(args.Data)) return;
+                Logger.Info($"[DocFX] {args.Data}");
+            };
+            ProcessInstallDocFX.ErrorDataReceived += (_, args) =>
+            {
+                if (string.IsNullOrWhiteSpace(args.Data)) return;
+                Logger.Error($"[DocFX] {args.Data}");
+            };
+            
+            ProcessUpgradeDocFX = new()
+            {
+                StartInfo = new()
+                {
+                    CreateNoWindow = true,
+                    FileName = "dotnet",
+                    Arguments = "tool update -g docfx",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false
+                }
+            };
+
+            ProcessUpgradeDocFX.OutputDataReceived += (_, args) =>
+            {
+                if (string.IsNullOrWhiteSpace(args.Data)) return;
+                Logger.Info($"[DocFX] {args.Data}");
+            };
+            ProcessUpgradeDocFX.ErrorDataReceived += (_, args) =>
+            {
+                if (string.IsNullOrWhiteSpace(args.Data)) return;
                 Logger.Error($"[DocFX] {args.Data}");
             };
         }
@@ -58,7 +111,19 @@ namespace UnityXRefMap
         private static void Main(string[] args)
         {
             Match match;
+            int exitCode;
+            string version;
+            int majorVersion;
+            int minorVersion;
             List<string> files = new();
+            bool deprecatedVersion = true;
+            
+            exitCode = RunProcess(ProcessInstallDocFX);
+
+            if (exitCode != 0)
+            {
+                throw new ($"DotNet exited with code {exitCode}");
+            }
             
             if (!Directory.Exists(UnityCsReferenceLocalPath))
             {
@@ -67,13 +132,15 @@ namespace UnityXRefMap
 
             using (Repository repo = new(UnityCsReferenceLocalPath))
             {
-                foreach (Branch branch in repo.Branches.OrderByDescending(b => b.FriendlyName))
+                foreach (Branch branch in repo.Branches.OrderBy(b => b.FriendlyName))
                 {
                     match = BranchRegex.Match(branch.FriendlyName);
-
+                    
                     if (!match.Success) continue;
 
-                    string version = match.Groups[1].Value;
+                    majorVersion = int.Parse(match.Groups[1].Value);
+                    minorVersion = int.Parse(match.Groups[2].Value);
+                    version = $"{majorVersion}.{minorVersion}";
 
                     if (args.Length > 0 && Array.IndexOf(args, version) == -1)
                     {
@@ -86,8 +153,20 @@ namespace UnityXRefMap
                     Commands.Checkout(repo, branch);
 
                     repo.Reset(ResetMode.Hard);
+                    
+                    if (deprecatedVersion && majorVersion >= 2022)
+                    {
+                        deprecatedVersion = false;
+                        
+                        exitCode = RunProcess(ProcessUpgradeDocFX);
 
-                    int exitCode = RunDocFx();
+                        if (exitCode != 0)
+                        {
+                            throw new($"DotNet exited with code {exitCode}");
+                        }
+                    }
+                    
+                    exitCode = RunProcess(ProcessExecuteDocFX);
 
                     if (exitCode != 0)
                     {
@@ -98,43 +177,27 @@ namespace UnityXRefMap
                     files.Add(GenerateMap(version));
                 }
             }
-
-            using (StreamWriter writer = new(Path.Join(OutputFolder, "index.html")))
-            {
-                Logger.Info("Writing index.html");
-
-                writer.WriteLine("<html>\n<body>\n<ul>");
-
-                foreach (string file in files)
-                {
-                    writer.WriteLine($"<li><a href=\"{file}\">{file}</a></li>");
-                }
-
-                writer.WriteLine("</ul>\n</body>\n</html>");
-            }
         }
 
-        private static int RunDocFx()
+        private static int RunProcess(Process process)
         {
-            Logger.Info("Running DocFX");
+            process.Start();
 
-            Process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
 
-            Process.BeginOutputReadLine();
-            Process.BeginErrorReadLine();
+            process.WaitForExit();
 
-            Process.WaitForExit();
+            process.CancelOutputRead();
+            process.CancelErrorRead();
 
-            Process.CancelOutputRead();
-            Process.CancelErrorRead();
-
-            return Process.ExitCode;
+            return process.ExitCode;
         }
 
         private static string GenerateMap(string version)
         {
             YamlMappingNode reference;
-            Logger.Info($"Generating XRef map for Unity {version}");
+            Logger.Info($"Generating XRef Map for Unity {version}");
 
             References.Clear();
 
@@ -183,7 +246,7 @@ namespace UnityXRefMap
             string relativeOutputFilePath = Path.Join(version, "xrefmap.yml");
             string outputFilePath = Path.Join(OutputFolder, relativeOutputFilePath);
 
-            Logger.Info($"Saving XRef map to '{outputFilePath}'");
+            Logger.Info($"Saving XRef Map to '{outputFilePath}'");
 
             Directory.CreateDirectory(Path.GetDirectoryName(outputFilePath));
 
