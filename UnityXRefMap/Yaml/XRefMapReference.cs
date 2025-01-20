@@ -53,7 +53,7 @@ namespace UnityXRefMap.Yaml
         private static partial Regex Method1Regex();
         [GeneratedRegex(@"\(.*\)")]
         private static partial Regex Method2Regex();
-        [GeneratedRegex(@"\.([a-z].*)$")]
+        [GeneratedRegex(@"\.([a-z][^.]*)$")]
         private static partial Regex PropertyRegex();
     }
 }
