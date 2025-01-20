@@ -65,7 +65,7 @@ namespace UnityXRefMap
                 {
                     CreateNoWindow = true,
                     FileName = "dotnet",
-                    Arguments = "tool install -g docfx --version 2.61.0",
+                    Arguments = "tool install -g docfx --version 2.78.2",
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false

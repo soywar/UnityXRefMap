@@ -25,12 +25,12 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Setup dotnet
-      uses: actions/setup-dotnet@v3
+      uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 6.0.x
+        dotnet-version: 8.x
 
     - name: Restore Packages
       run: dotnet restore
@@ -39,7 +39,7 @@ jobs:
       run: dotnet build --configuration Release --no-restore
 
     - name: Checkout GitHub Pages branch
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         ref: gh-pages
         path: UnityXRefMap/out
@@ -55,7 +55,7 @@ jobs:
         dotnet run --configuration Release --no-build
 
     - name: Upload XRef Maps
-      uses: actions/upload-pages-artifact@v1
+      uses: actions/upload-pages-artifact@v3
       with:
         name: github-pages
         path: UnityXRefMap/out
@@ -70,4 +70,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v1
+        uses: actions/deploy-pages@v4
