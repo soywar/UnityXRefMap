@@ -3,10 +3,8 @@ using YamlDotNet.Serialization;
 
 namespace UnityXRefMap.Yaml
 {
-    internal class XRefMapReference
+    internal partial class XRefMapReference
     {
-        private static readonly string[] HrefNamespacesToTrim = { "UnityEditor", "UnityEngine" };
-        
         [YamlMember(Alias = "uid")] public string Uid;
         [YamlMember(Alias = "name")] public string Name;
         [YamlMember(Alias = "fullName")] public string FullName;
@@ -14,7 +12,7 @@ namespace UnityXRefMap.Yaml
         [YamlMember(Alias = "commentId")] public string CommentId;
         [YamlMember(Alias = "nameWithType")] public string NameWithType;
         [YamlMember(Alias = "type")] public string Type;
-        
+
         public void FixHref(string apiUrl)
         {
             string href;
@@ -26,33 +24,36 @@ namespace UnityXRefMap.Yaml
             }
             else
             {
-                href = Uid;
-
                 // Trim UnityEngine and UnityEditor namespaces from href
-                foreach (string hrefNamespaceToTrim in HrefNamespacesToTrim)
-                {
-                    href = href.Replace($"{hrefNamespaceToTrim}.", "");
-                }
+                href = TrimNameSpaceRegex().Replace(Uid, "");
 
                 // Fix href of constructors
                 href = href.Replace(".#ctor", "-ctor");
 
                 // Fix href of generics
-                href = Regex.Replace(href, @"`{2}\d+", "");
+                href = GenericRegex().Replace(href, "");
                 href = href.Replace("`", "_");
 
                 // Fix href of methods
-                href = Regex.Replace(href, @"\*$", "");
-                href = Regex.Replace(href, @"\(.*\)", "");
+                href = Method1Regex().Replace(href, "");
+                href = Method2Regex().Replace(href, "");
 
-                // Fix href of properties
-                if (CommentId.StartsWith("P:") || CommentId.StartsWith("F:") || CommentId.StartsWith("M:"))
-                {
-                    href = Regex.Replace(href, @"\.([a-z].*)$", "-$1");
-                }
+                // Fix href of properties and fields
+                href = PropertyRegex().Replace(href, "-$1");
             }
 
             Href = $"{apiUrl}{href}.html";
         }
+
+        [GeneratedRegex(@"^(UnityEditor|UnityEngine)\.")]
+        private static partial Regex TrimNameSpaceRegex();
+        [GeneratedRegex(@"`{2}\d+")]
+        private static partial Regex GenericRegex();
+        [GeneratedRegex(@"\*$")]
+        private static partial Regex Method1Regex();
+        [GeneratedRegex(@"\(.*\)")]
+        private static partial Regex Method2Regex();
+        [GeneratedRegex(@"\.([a-z].*)$")]
+        private static partial Regex PropertyRegex();
     }
 }
