@@ -22,7 +22,6 @@ namespace UnityXRefMap
         private static readonly List<XRefMapReference> References;
         private static readonly Process ProcessExecuteDocFX;
         private static readonly Process ProcessInstallDocFX;
-        private static readonly Process ProcessUpgradeDocFX;
         private static readonly Regex BranchRegex;
 
         static Program()
@@ -82,30 +81,6 @@ namespace UnityXRefMap
                 if (string.IsNullOrWhiteSpace(args.Data)) return;
                 Logger.Error($"[DocFX] {args.Data}");
             };
-            
-            ProcessUpgradeDocFX = new()
-            {
-                StartInfo = new()
-                {
-                    CreateNoWindow = true,
-                    FileName = "dotnet",
-                    Arguments = "tool update -g docfx",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false
-                }
-            };
-
-            ProcessUpgradeDocFX.OutputDataReceived += (_, args) =>
-            {
-                if (string.IsNullOrWhiteSpace(args.Data)) return;
-                Logger.Info($"[DocFX] {args.Data}");
-            };
-            ProcessUpgradeDocFX.ErrorDataReceived += (_, args) =>
-            {
-                if (string.IsNullOrWhiteSpace(args.Data)) return;
-                Logger.Error($"[DocFX] {args.Data}");
-            };
         }
         
         private static void Main(string[] args)
@@ -116,7 +91,6 @@ namespace UnityXRefMap
             int majorVersion;
             int minorVersion;
             List<string> files = new();
-            bool deprecatedVersion = true;
             
             exitCode = RunProcess(ProcessInstallDocFX);
 
@@ -154,18 +128,6 @@ namespace UnityXRefMap
 
                     repo.Reset(ResetMode.Hard);
                     
-                    if (deprecatedVersion && majorVersion >= 2022)
-                    {
-                        deprecatedVersion = false;
-                        
-                        exitCode = RunProcess(ProcessUpgradeDocFX);
-
-                        if (exitCode != 0)
-                        {
-                            throw new($"DotNet exited with code {exitCode}");
-                        }
-                    }
-                    
                     exitCode = RunProcess(ProcessExecuteDocFX);
 
                     if (exitCode != 0)
@@ -176,6 +138,17 @@ namespace UnityXRefMap
 
                     files.Add(GenerateMap(version));
                 }
+            }
+
+            using (StreamWriter writer = new(Path.Join(OutputFolder, "index.html")))
+            {
+                Logger.Info("Writing index.html");
+                writer.WriteLine("<html>\n<body>\n<ul>");
+                foreach (string file in files)
+                {
+                    writer.WriteLine($"<li><a href=\"{file}\">{file}</a></li>");
+                }
+                writer.WriteLine("</ul>\n</body>\n</html>");
             }
         }
 
