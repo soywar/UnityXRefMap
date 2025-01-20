@@ -20,7 +20,7 @@ namespace UnityXRefMap.Yaml
             string href;
 
             // Namespaces point to documentation index
-            if (CommentId.Contains("N:"))
+            if (CommentId.StartsWith("N:"))
             {
                 href = "index";
             }
@@ -38,7 +38,7 @@ namespace UnityXRefMap.Yaml
                 href = href.Replace(".#ctor", "-ctor");
 
                 // Fix href of generics
-                href = Regex.Replace(href, @"`{2}\d", "");
+                href = Regex.Replace(href, @"`{2}\d+", "");
                 href = href.Replace("`", "_");
 
                 // Fix href of methods
@@ -46,7 +46,7 @@ namespace UnityXRefMap.Yaml
                 href = Regex.Replace(href, @"\(.*\)", "");
 
                 // Fix href of properties
-                if (CommentId.Contains("P:") || CommentId.Contains("M:"))
+                if (CommentId.StartsWith("P:") || CommentId.StartsWith("F:") || CommentId.StartsWith("M:"))
                 {
                     href = Regex.Replace(href, @"\.([a-z].*)$", "-$1");
                 }
